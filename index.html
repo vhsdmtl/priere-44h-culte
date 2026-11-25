@@ -3,7 +3,7 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
-<title>44 h de prière · Ministère du Culte · Inscriptions</title>
+<title>44 h de prière · Ministère du Culte</title>
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600&family=Fraunces:opsz,wght@9..144,600&display=swap" rel="stylesheet">
 <style>
@@ -37,6 +37,25 @@
   .depts span{font-size:13px;padding:6px 12px;border-radius:999px;background:#fff;border:1px solid var(--line);color:var(--muted)}
   .depts b{color:var(--ink);font-weight:600}
   .slot .d{font-size:12px;color:var(--muted);text-transform:uppercase;letter-spacing:.04em}
+  .live{display:grid;grid-template-columns:1.4fr 1fr;gap:12px;margin:0 0 8px}
+  @media (max-width:620px){.live{grid-template-columns:1fr}}
+  .lcard{border-radius:16px;padding:20px 22px;background:var(--card);border:1px solid var(--line)}
+  .lcard.now{background:#1d2433;color:#f4f1ea;border-color:#1d2433}
+  .lcard .lab{font-size:12px;letter-spacing:.1em;text-transform:uppercase;font-weight:600;color:var(--muted);display:flex;align-items:center;gap:8px}
+  .lcard.now .lab{color:#8fe0b0}
+  .lcard .dot{width:9px;height:9px;border-radius:50%;background:#8fe0b0;animation:pulse 1.6s infinite}
+  @keyframes pulse{50%{opacity:.3}}
+  .lcard .who{font-family:Fraunces,Georgia,serif;font-size:clamp(28px,5vw,44px);line-height:1.1;margin:10px 0 6px;word-break:break-word}
+  .lcard.next .who{font-size:clamp(22px,3.5vw,30px)}
+  .lcard .meta{font-size:15px;color:var(--muted)}
+  .lcard.now .meta{color:#c9c4ba}
+  .lcard .dep{display:inline-block;margin-top:10px;padding:4px 11px;border-radius:999px;font-size:13px;border:1px solid var(--line);color:var(--accent)}
+  .lcard.now .dep{border-color:#3a4256;color:#e9b65c}
+  .lcard .vac{color:#c2552b}.lcard.now .vac{color:#ef8f6b}
+  .clock{font-variant-numeric:tabular-nums}
+  h2.sec{font-size:13px;letter-spacing:.08em;text-transform:uppercase;color:var(--muted);margin:32px 0 12px}
+  .slot.live{border-color:#1f6b45;box-shadow:0 0 0 3px rgba(31,107,69,.18)}
+  .slot.past{opacity:.5}
   .legend{display:flex;gap:16px;flex-wrap:wrap;font-size:13px;color:var(--muted);margin-top:8px}
   .legend span::before{content:"";display:inline-block;width:12px;height:12px;border-radius:3px;margin-right:6px;vertical-align:-1px;border:1px solid var(--line)}
   .legend .l1::before{background:#fff}.legend .l2::before{background:var(--taken)}.legend .l3::before{background:#eef6f0;border-color:var(--ok)}
@@ -62,9 +81,14 @@
 <body>
 <main>
   <p class="kicker">Temps de prière de 44 heures · 25 – 27 novembre 2026</p>
-  <h1>Ministère du Culte : inscriptions</h1>
-  <p class="intro">Notre ministère dirige deux créneaux de 2 heures. Choisissez une tranche de 30 minutes libre, puis indiquez votre nom et votre département. Une tranche prise disparaît aussitôt pour tout le monde, il n'y a donc pas de doublons.</p>
+  <h1>Ministère du Culte : qui dirige la prière</h1>
+  <p class="intro">Notre ministère dirige deux créneaux de 2 heures. Voyez en direct qui dirige la prière, puis choisissez une tranche de 30 minutes libre et indiquez votre nom et votre département. Une tranche prise disparaît aussitôt pour tout le monde, il n'y a donc pas de doublons.</p>
   <div id="banner" class="banner" hidden></div>
+  <section class="live" aria-live="polite">
+    <div class="lcard now" id="now"></div>
+    <div class="lcard next" id="next"></div>
+  </section>
+  <h2 class="sec">Programme et inscriptions</h2>
   <div id="depts" class="depts" aria-label="Inscriptions par département"></div>
   <div id="days" aria-live="polite"></div>
   <div class="legend"><span class="l1">Libre</span><span class="l2">Prise</span><span class="l3">Mon inscription</span></div>
@@ -93,8 +117,10 @@
 
 <script>
 /* ======= CONFIGURATION ======= */
-const API_URL = 'https://script.google.com/macros/s/AKfycbztJYnZt9LP4dvdC9rpvGU3S0UqQRciZ8m81CYSAqA6P571Ho3H7ZGVSc68-ohlbQPK/exec';
+const API_URL = 'https://script.google.com/macros/s/AKfycbztJYnZt9LP4dvdC9rpvGU3S0UqQRciZ8m81CYSAqA6P571Ho3H7ZGVSc68-ohlbQPK/exec'; // ← collez ici l'URL du déploiement Apps Script (se termine par /exec)
+const REFRESH_MS = 15000;
 /* ============================= */
+
 const DEPARTEMENTS = ['Portiers', 'Direction', 'Gestion des cultes', 'Traduction', 'Sainte Cène'];
 const TRANCHES_DEMO = [
   { id:'J-1600', jour:'Jeudi 26 novembre', debut:'16:00', fin:'16:30' },
@@ -151,7 +177,38 @@ async function api(payload){
 function toast(msg){ const t=$('#toast'); t.textContent=msg; t.classList.add('show'); clearTimeout(toast.h); toast.h=setTimeout(()=>t.classList.remove('show'),3500); }
 const h = s => s.replace(/^0/,'').replace(/:00$/,' h').replace(/:/,' h ');
 
+const DATES = { 'Jeudi 26 novembre': '2026-11-26', 'Vendredi 27 novembre': '2026-11-27' };
+const at = (jour, hhmm) => new Date(`${DATES[jour]}T${hhmm}:00-05:00`);
+const mk = (tag, cls, txt) => { const e = document.createElement(tag); if (cls) e.className = cls; if (txt != null) e.textContent = txt; return e; };
+function carte(card, label, t, isLive){
+  const now = new Date(); card.textContent = '';
+  const lab = mk('div','lab'); if (isLive) lab.appendChild(mk('span','dot')); lab.append(label); card.appendChild(lab);
+  if (!t){
+    card.appendChild(mk('div','who','—'));
+    const first = tranches[0] && at(tranches[0].jour, tranches[0].debut);
+    card.appendChild(mk('div','meta', isLive ? (first && now < first ? 'Notre première tranche commence jeudi 26 novembre à 16 h.' : 'Pas de tranche du Ministère du Culte en ce moment.') : 'Plus de tranche prévue.'));
+    return;
+  }
+  const n = t.inscrits.map(i=>i.nom).join(', ');
+  card.appendChild(mk('div','who' + (n ? '' : ' vac'), n || 'À pourvoir'));
+  let meta = `${t.jour} · ${h(t.debut)} – ${h(t.fin)}`;
+  const min = Math.round((at(t.jour,t.debut) - now)/60000);
+  if (!isLive && min > 0) meta += min < 60 ? ` · dans ${min} min` : min < 1440 ? ` · dans ${Math.floor(min/60)} h ${String(min%60).padStart(2,'0')}` : '';
+  card.appendChild(mk('div','meta',meta));
+  const d = t.inscrits.map(i=>i.departement).filter(Boolean).join(', ');
+  if (d) card.appendChild(mk('span','dep',d));
+}
+function renderLive(){
+  const now = new Date();
+  const live = tranches.find(t => at(t.jour,t.debut) <= now && now < at(t.jour,t.fin));
+  const next = tranches.find(t => at(t.jour,t.debut) > now);
+  carte($('#now'), 'En ce moment', live, true);
+  carte($('#next'), live ? 'Ensuite' : 'Prochaine tranche', next, false);
+  return live;
+}
+
 function render(){
+  const liveT = renderLive();
   const byDay = {};
   tranches.forEach(t => (byDay[t.jour] ||= []).push(t));
   const wrap = $('#days'); wrap.textContent = '';
@@ -166,6 +223,7 @@ function render(){
       const b = document.createElement('button'); b.type='button'; b.className='slot';
       const mine = mes[t.id] && t.inscrits.some(i => i.jeton === mes[t.id].slice(0,6));
       const full = t.inscrits.length >= t.capacite;
+      if (t === liveT) b.classList.add('live'); else if (at(t.jour, t.fin) <= new Date()) b.classList.add('past');
       const label = `${h(t.debut)} – ${h(t.fin)}`;
       let status = 'Libre · s’inscrire';
       if (mine){ b.classList.add('mine'); status = 'Vous ✓ · annuler'; }
@@ -241,6 +299,7 @@ if (!API_URL){ const b=$('#banner'); b.hidden=false; b.textContent='Mode démons
 DEPARTEMENTS.forEach(d => { const o = document.createElement('option'); o.value = o.textContent = d; $('#frm').elements.departement.appendChild(o); });
 refresh();
 setInterval(() => { if (!$('#dlg').open) refresh(); }, REFRESH_MS);
+setInterval(() => { if (tranches.length && !$('#dlg').open) render(); }, 30000);
 document.addEventListener('visibilitychange', () => { if (!document.hidden) refresh(); });
 </script>
 </body>
